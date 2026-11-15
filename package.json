@@ -1,0 +1,19 @@
+{
+  "name": "club-info-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @cims/server --filter @cims/web dev",
+    "dev:server": "pnpm --filter @cims/server dev",
+    "dev:web": "pnpm --filter @cims/web dev",
+    "build": "pnpm --filter @cims/shared build && pnpm --filter @cims/web build",
+    "typecheck": "pnpm --filter @cims/shared build && pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "seed": "pnpm --filter @cims/server seed"
+  }
+}
