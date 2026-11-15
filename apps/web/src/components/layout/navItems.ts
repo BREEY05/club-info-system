@@ -5,7 +5,7 @@ import {
   Clock3,
   Code2,
   History,
-  LayoutGrid,
+  LayoutDashboard,
   Settings,
   Sparkles,
   Users,
@@ -27,29 +27,37 @@ export interface NavGroup {
 }
 
 /**
- * 导航分组：主功能排课表（FreeShift 体系），附功能刷题判题（BlueBridge 体系）。
- * 本地单用户运行，所有页面都可访问，没有角色过滤。
+ * 导航：一个社团负责人日常会用到的全部入口。
+ * 本机单人使用，没有角色差异，所有页面都可访问。
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    key: 'schedule',
-    title: '排课表',
+    key: 'work',
+    title: '社团工作台',
     items: [
-      { to: '/', label: '排课表', description: '我的课程安排', icon: LayoutGrid, end: true },
-      { to: '/users', label: '成员', description: '成员资料与个人表', icon: Users },
-      { to: '/slots', label: '时间段', description: '模板与我的表', icon: Clock3 },
-      { to: '/recommend', label: '推荐', description: '共同空闲与加权', icon: Sparkles },
-      { to: '/stats', label: '统计', description: '公平性与负载', icon: BarChart3 },
-      { to: '/org', label: '社团', description: '组织信息与成员', icon: Building2 },
-      { to: '/settings', label: '设置', description: '学期与数据', icon: Settings },
+      { to: '/', label: '总览', description: '今天该做什么', icon: LayoutDashboard, end: true },
+      { to: '/timetable', label: '课表', description: '成员课表与空档', icon: CalendarDays },
+      { to: '/members', label: '成员', description: '社团成员档案', icon: Users },
+      { to: '/free', label: '空闲时间', description: '找共同空闲', icon: Sparkles },
+      { to: '/activities', label: '活动', description: '例会与活动排期', icon: Clock3 },
+      { to: '/stats', label: '统计', description: '课表与运行情况', icon: BarChart3 },
     ],
   },
   {
     key: 'judge',
-    title: '刷题',
+    title: '刷题训练',
     items: [
       { to: '/practice', label: '题库', description: '做题与判题', icon: Code2, end: true },
       { to: '/practice/history', label: '提交记录', description: '历史评测结果', icon: History },
+    ],
+  },
+  {
+    key: 'system',
+    title: '系统',
+    items: [
+      { to: '/club', label: '社团', description: '社团档案', icon: Building2 },
+      { to: '/slots', label: '时间段', description: '时间块与学期模板', icon: Clock3 },
+      { to: '/settings', label: '设置', description: '学期与数据', icon: Settings },
     ],
   },
 ];

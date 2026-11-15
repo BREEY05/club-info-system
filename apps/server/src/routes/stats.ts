@@ -1,25 +1,19 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
-import { AppError } from '../lib/errors.ts';
+import type { FastifyPluginAsync } from 'fastify';
 import { toInt } from '../lib/params.ts';
-import { getFairnessReport } from '../services/fairnessService.ts';
-import { isAdminRequest, requireOrg } from '../services/orgContext.ts';
+import { requireOrg } from '../services/orgContext.ts';
+import { getMemberStats, getOverview, getSlotStats } from '../services/statsService.ts';
 
-function requireAdmin(request: FastifyRequest): void {
-  if (!isAdminRequest(request)) throw new AppError(403, 'FORBIDDEN', '需要管理员权限');
-}
-
+/** 社团经营指标：总览、成员课表完整度、一周空闲分布。 */
 export const statsRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/fairness', async (request) => {
-    requireAdmin(request);
+  app.get('/overview', async (request) => {
     const query = request.query as Record<string, unknown>;
-    return {
-      data: getFairnessReport(
-        {
-          fromWeek: toInt(query.from_week, undefined),
-          toWeek: toInt(query.to_week, undefined),
-        },
-        requireOrg(request),
-      ),
-    };
+    return { data: getOverview(requireOrg(request), toInt(query.week, undefined)) };
+  });
+
+  app.get('/members', async (request) => ({ data: { members: getMemberStats(requireOrg(request)) } }));
+
+  app.get('/slots', async (request) => {
+    const query = request.query as Record<string, unknown>;
+    return { data: { slots: getSlotStats(requireOrg(request), toInt(query.week, undefined)) } };
   });
 };

@@ -58,6 +58,9 @@ export interface TimeSlot {
   sortOrder: number;
 }
 
+export type MemberRole = 'leader' | 'minister' | 'staff' | 'member';
+
+/** 社团成员档案（本地单人使用，不需要邮箱身份）。 */
 export interface AppUser {
   id: number;
   name: string;
@@ -67,11 +70,51 @@ export interface AppUser {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
-  /** 登录邮箱；历史遗留用户可能为 null */
+  /** 年级，如「2024级」 */
+  grade: string;
+  /** 专业 / 班级 */
+  major: string;
+  /** 联系电话 */
+  phone: string;
+  /** 社团职务 */
+  role: MemberRole;
+  /** 入社时间 YYYY-MM-DD */
+  joinedAt: string;
+  /** 历史字段：本地模式不再使用 */
   email: string | null;
-  /** 该成员的当前个人表模板 id */
   templateId: number | null;
   templateName: string | null;
+}
+
+/** 社团档案（本机只有一个社团）。 */
+export interface ClubInfo {
+  id: number;
+  name: string;
+  description: string;
+  ownerName: string;
+  contact: string;
+  createdAt: string;
+  memberCount: number;
+}
+
+export type ActivityKind = 'meeting' | 'training' | 'event' | 'other';
+export type ActivityStatus = 'planned' | 'done' | 'canceled';
+
+/** 社团活动 / 例会。 */
+export interface Activity {
+  id: number;
+  title: string;
+  kind: ActivityKind;
+  status: ActivityStatus;
+  /** YYYY-MM-DD */
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  participantIds: number[];
+  note: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Schedule {
@@ -329,6 +372,11 @@ export interface SlotReorderInput {
 export interface UserInput {
   name: string;
   color?: string;
+  grade?: string;
+  major?: string;
+  phone?: string;
+  role?: MemberRole;
+  joinedAt?: string;
   note?: string;
   isActive?: boolean;
 }

@@ -132,7 +132,7 @@ export function DataTransferPanel({ totalWeeks, currentWeek, onSaved }: DataTran
         queryClient.invalidateQueries({ queryKey: ['board'] }),
         queryClient.invalidateQueries({ queryKey: ['schedules'] }),
         queryClient.invalidateQueries({ queryKey: ['stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['recommend'] }),
+        queryClient.invalidateQueries({ queryKey: ['free'] }),
       ]);
       onSaved('CSV 导入完成：新建 ' + result.created + ' 条，跳过 ' + result.skipped + ' 条');
     },
@@ -175,7 +175,7 @@ export function DataTransferPanel({ totalWeeks, currentWeek, onSaved }: DataTran
     <Card className="overflow-hidden">
       <div className="border-b border-line px-4 py-3">
         <h2 className="text-xs font-semibold text-ink">数据导入导出</h2>
-        <p className="mt-0.5 text-2xs text-muted">CSV 可直接用 Excel 打开；导入会按成员姓名与当前模板的时间段名称匹配。</p>
+        <p className="mt-0.5 text-2xs text-muted">CSV 可直接用 Excel 打开；导入时按成员姓名与时间段名称匹配，适合一次录入全员的课表。</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-2">
@@ -211,12 +211,12 @@ export function DataTransferPanel({ totalWeeks, currentWeek, onSaved }: DataTran
         </div>
 
         <div className="rounded-control border border-line px-3 py-2.5">
-          <div className="text-xs font-medium text-ink">导出当前周看板 CSV</div>
+          <div className="text-xs font-medium text-ink">导出本周空闲概览 CSV</div>
           <p className="mt-0.5 text-2xs text-muted">首列时间段，周一至周日，格子内容「空闲 N/M」</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="text-2xs text-muted">周次</span>
             <div className="w-24">
-              <Select aria-label="看板导出周次" value={String(boardWeek)} onChange={(event) => setBoardWeek(Number(event.target.value))} className="h-8 text-xs">
+              <Select aria-label="概览导出周次" value={String(boardWeek)} onChange={(event) => setBoardWeek(Number(event.target.value))} className="h-8 text-xs">
                 {weeks.map((week) => (
                   <option key={week} value={week}>
                     第 {week} 周
@@ -224,7 +224,7 @@ export function DataTransferPanel({ totalWeeks, currentWeek, onSaved }: DataTran
                 ))}
               </Select>
             </div>
-            <ExportLink href={boardExportUrl(boardWeek)}>下载看板 CSV</ExportLink>
+            <ExportLink href={boardExportUrl(boardWeek)}>下载概览 CSV</ExportLink>
           </div>
         </div>
       </div>
@@ -305,9 +305,9 @@ export function DataTransferPanel({ totalWeeks, currentWeek, onSaved }: DataTran
           <div className="mt-2 space-y-2 text-2xs leading-5 text-muted">
             <ul className="list-disc space-y-0.5 pl-4">
               <li>编码 UTF-8；第一行为表头，逗号分隔，支持双引号包裹含逗号的内容。</li>
-              <li>user：成员姓名，需与用户列表中的名称完全一致。</li>
+              <li>user：成员姓名，需与「成员」页中的姓名完全一致；姓名不存在时会跳过该行。</li>
               <li>weekday：1–7（周一 = 1，周日 = 7）。</li>
-              <li>slot_label：时间段名称，需与当前启用模板中的名称一致。</li>
+              <li>slot_label：时间段名称，需与「时间段」页中的名称一致。</li>
               <li>start_week / end_week：1–学期总周次，且起始不大于结束。</li>
               <li>parity：all / odd / even，留空按 all 处理。</li>
               <li>note：备注，可留空；无法解析的行计入错误但不中断整批导入。</li>
@@ -343,7 +343,7 @@ export function DataTransferPanel({ totalWeeks, currentWeek, onSaved }: DataTran
               预计新建 {preview.created} 条安排、跳过 {preview.skipped} 条；{preview.errors.length} 行存在解析错误会被忽略。
             </Alert>
             <p className="text-xs leading-5 text-muted">
-              导入后看板、统计与推荐数据会立即刷新。若结果不符合预期，可在看板中删除对应安排后重新导入。
+              导入后课表、空闲时间与统计数据会立即刷新。若结果不符合预期，可在课表中删掉对应安排后重新导入。
             </p>
           </div>
         </Dialog>

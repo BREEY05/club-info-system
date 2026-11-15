@@ -16,8 +16,9 @@ import { dataRoutes } from './routes/data.ts';
 import { installLocalSession } from './routes/session.ts';
 import { orgRoutes } from './routes/org.ts';
 import { judgeRoutes } from './routes/judge.ts';
+import { activityRoutes } from './routes/activities.ts';
 
-export const APP_VERSION = process.env.APP_VERSION ?? '1.1.0';
+export const APP_VERSION = process.env.APP_VERSION ?? '1.2.0';
 
 export interface BuildAppOptions {
   logger?: boolean | { level: string };
@@ -149,6 +150,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       await api.register(recommendRoutes, { prefix: '/recommend' });
       await api.register(statsRoutes, { prefix: '/stats' });
       await api.register(dataRoutes);
+      await api.register(activityRoutes, { prefix: '/activities' });
       await api.register(judgeRoutes, { prefix: '/judge' });
     },
     { prefix: '/api/v1' },

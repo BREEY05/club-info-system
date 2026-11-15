@@ -7,15 +7,31 @@ import { mapUser, type UserRow } from '../lib/mappers.ts';
 import { defaultOrgId, getUserById, USER_SELECT } from './context.ts';
 import { ensureUserForEmail, getUserRow, personalTemplateId, orgTemplateId, sameSlotType } from './tableService.ts';
 
+export const MEMBER_ROLES = ['leader', 'minister', 'staff', 'member'] as const;
+
 export const userInputSchema = z.object({
   name: z
-    .string({ required_error: '请输入用户名', invalid_type_error: '用户名必须为字符串' })
+    .string({ required_error: '请输入姓名', invalid_type_error: '姓名必须为字符串' })
     .trim()
-    .min(1, '用户名不能为空')
-    .max(50, '用户名不能超过 50 个字符'),
+    .min(1, '姓名不能为空')
+    .max(50, '姓名不能超过 50 个字符'),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, '颜色必须为 #RRGGBB 格式')
+    .optional(),
+  grade: z.string().trim().max(20, '年级不能超过 20 个字符').optional(),
+  major: z.string().trim().max(40, '专业不能超过 40 个字符').optional(),
+  phone: z
+    .string()
+    .trim()
+    .max(20, '电话不能超过 20 个字符')
+    .regex(/^[0-9+\-\s()]*$/, '电话只能包含数字和 + - 空格 括号')
+    .optional(),
+  role: z.enum(MEMBER_ROLES).optional(),
+  joinedAt: z
+    .string()
+    .trim()
+    .regex(/^$|^\d{4}-\d{2}-\d{2}$/, '入社时间格式应为 YYYY-MM-DD')
     .optional(),
   note: z.string().max(200, '备注不能超过 200 个字符').optional(),
   isActive: z.boolean({ invalid_type_error: 'isActive 必须为布尔值' }).optional(),
@@ -88,9 +104,21 @@ export function createUser(input: UserInputParsed, orgId = defaultOrgId()): AppU
   const sortOrder = nextSortOrder(orgId);
   try {
     const result = run(
-      `INSERT INTO app_user (org_id, name, color, note, is_active, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [orgId, name, color, input.note ?? '', input.isActive === false ? 0 : 1, sortOrder],
+      `INSERT INTO app_user (org_id, name, color, note, is_active, sort_order, grade, major, phone, role, joined_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        orgId,
+        name,
+        color,
+        input.note ?? '',
+        input.isActive === false ? 0 : 1,
+        sortOrder,
+        input.grade ?? '',
+        input.major ?? '',
+        input.phone ?? '',
+        input.role ?? 'member',
+        input.joinedAt ?? new Date().toISOString().slice(0, 10),
+      ],
     );
     return getUserById(result.lastInsertRowid, orgId);
   } catch (error) {
@@ -124,6 +152,18 @@ export function updateUser(id: number, patch: UserPatchParsed, orgId = defaultOr
   if (patch.isActive !== undefined) {
     sets.push('is_active = ?');
     params.push(patch.isActive ? 1 : 0);
+  }
+  for (const [column, value] of [
+    ['grade', patch.grade],
+    ['major', patch.major],
+    ['phone', patch.phone],
+    ['role', patch.role],
+    ['joined_at', patch.joinedAt],
+  ] as const) {
+    if (value !== undefined) {
+      sets.push(column + ' = ?');
+      params.push(value);
+    }
   }
   if (sets.length > 0) {
     sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");

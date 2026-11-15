@@ -1,421 +1,256 @@
+import type { DayPart, SlotInput, TimeSlot } from '@cims/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Layers, RefreshCw } from 'lucide-react';
+import { Clock3, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { SlotTemplate } from '@cims/shared';
-import { useSession } from '../auth/session';
-import {
-  activateTemplate,
-  conflictScheduleCount,
-  deleteTemplate,
-  fetchTemplateDetail,
-  fetchTemplates,
-  fetchMyProfile,
-  setMyTemplate,
-  templateKeys,
-} from '../api/templates';
-import { SlotEditor } from '../components/pages/templates/SlotEditor';
-import { TemplateFormDialog, type TemplateFormMode } from '../components/pages/templates/TemplateFormDialog';
-import { TemplateList } from '../components/pages/templates/TemplateList';
-import { Alert } from '../components/ui/Alert';
+import { fetchTemplateDetail, replaceSlots, templateKeys } from '../api/templates';
+import { PageHeader } from '../components/layout/PageHeader';
+import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { Dialog } from '../components/ui/Dialog';
 import { EmptyState } from '../components/ui/EmptyState';
+import { Input, Select } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { useSemester } from '../hooks/useSemester';
 import { getErrorMessage } from '../lib/errors';
 
-type FormState = { mode: TemplateFormMode; source?: SlotTemplate };
+const DAY_PARTS: { value: DayPart; label: string }[] = [
+  { value: 'morning', label: '上午' },
+  { value: 'afternoon', label: '下午' },
+  { value: 'evening', label: '晚上' },
+];
 
-/** 时间段模板：左侧切换模板，右侧编辑时间段（预设只读，冲突 409 有明确指引） */
+interface DraftRow {
+  key: string;
+  label: string;
+  startTime: string;
+  endTime: string;
+  dayPart: DayPart;
+  durationMin: number;
+}
+
+function toDraft(slot: TimeSlot, index: number): DraftRow {
+  return {
+    key: 's' + slot.id + '-' + index,
+    label: slot.label,
+    startTime: slot.startTime ?? '',
+    endTime: slot.endTime ?? '',
+    dayPart: slot.dayPart,
+    durationMin: slot.durationMin,
+  };
+}
+
+function guessDuration(start: string, end: string, fallback: number): number {
+  if (!start || !end) return fallback;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return diff > 0 ? diff : fallback;
+}
+
+/** 时间段：社团一周用哪几个时间块（课表、活动都按它对齐）。 */
 export default function TemplatesPage() {
   const queryClient = useQueryClient();
-  const { session, isAdmin } = useSession();
-  const profileQuery = useQuery({ queryKey: ['users','me'], queryFn: fetchMyProfile });
-  const templatesQuery = useQuery({ queryKey: templateKeys.list('all'), queryFn: () => fetchTemplates('all'), staleTime: 30_000 });
-  const templates = templatesQuery.data ?? [];
-
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [pendingSelectId, setPendingSelectId] = useState<number | null>(null);
-  const [formState, setFormState] = useState<FormState | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SlotTemplate | null>(null);
-  const [forcePrompt, setForcePrompt] = useState<{ template: SlotTemplate; count: number } | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!statusMessage) return;
-    const timer = window.setTimeout(() => setStatusMessage(null), 5000);
-    return () => window.clearTimeout(timer);
-  }, [statusMessage]);
-
-  useEffect(() => {
-    if (templates.length === 0) return;
-    if (selectedId !== null && templates.some((template) => template.id === selectedId)) return;
-    const active = templates.find((template) => template.isActive);
-    setSelectedId(active?.id ?? templates[0]?.id ?? null);
-  }, [templates, selectedId]);
+  const semesterQuery = useSemester();
+  const semester = semesterQuery.data?.semester;
+  const templateId = semester?.activeTemplateId ?? null;
 
   const detailQuery = useQuery({
-    queryKey: templateKeys.detail(selectedId ?? 0),
-    queryFn: () => fetchTemplateDetail(selectedId as number),
-    enabled: selectedId !== null,
-    staleTime: 15_000,
+    queryKey: templateKeys.detail(templateId ?? 0),
+    queryFn: () => fetchTemplateDetail(templateId as number),
+    enabled: templateId !== null,
   });
 
-  async function invalidateTemplateScoped(): Promise<void> {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: templateKeys.all }),
-      queryClient.invalidateQueries({ queryKey: ['semester'] }),
-      queryClient.invalidateQueries({ queryKey: ['board'] }),
-      queryClient.invalidateQueries({ queryKey: ['schedules'] }),
-      queryClient.invalidateQueries({ queryKey: ['recommend'] }),
+  const [rows, setRows] = useState<DraftRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!detailQuery.data) return;
+    setRows(detailQuery.data.slots.map(toDraft));
+  }, [detailQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: SlotInput[]) => replaceSlots(templateId as number, payload),
+    onSuccess: () => {
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+      void queryClient.invalidateQueries({ queryKey: ['templates'] });
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
+      void queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+    onError: (mutationError) => setError(getErrorMessage(mutationError)),
+  });
+
+  function patchRow(key: string, patch: Partial<DraftRow>) {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.key !== key) return row;
+        const next = { ...row, ...patch };
+        if (patch.startTime !== undefined || patch.endTime !== undefined) {
+          next.durationMin = guessDuration(next.startTime, next.endTime, next.durationMin);
+        }
+        return next;
+      }),
+    );
+  }
+
+  function addRow() {
+    setRows((prev) => [
+      ...prev,
+      {
+        key: 's-new-' + Date.now(),
+        label: `第 ${prev.length + 1} 段`,
+        startTime: '',
+        endTime: '',
+        dayPart: 'afternoon',
+        durationMin: 90,
+      },
     ]);
   }
 
-  const setMineMutation = useMutation({
-    mutationFn: (id: number) => setMyTemplate(id),
-    onSuccess: async () => { await profileQuery.refetch(); await invalidateTemplateScoped(); setStatusMessage('已切换个人表'); },
-    onError: error => setActionError(getErrorMessage(error)),
-  });
-
-  const activateMutation = useMutation({
-    mutationFn: (input: { template: SlotTemplate; force: boolean }) => activateTemplate(input.template.id, input.force),
-    onSuccess: async (_overview, input) => {
-      await invalidateTemplateScoped();
-      setForcePrompt(null);
-      setActionError(null);
-      setDirty(false);
-      setStatusMessage('已切换到模板「' + input.template.name + '」');
-    },
-    onError: (error, input) => {
-      const count = conflictScheduleCount(error);
-      if (count !== null && !input.force) {
-        setForcePrompt({ template: input.template, count });
-        setActionError(null);
-        return;
-      }
-      setForcePrompt(null);
-      setActionError(getErrorMessage(error));
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (template: SlotTemplate) => deleteTemplate(template.id),
-    onSuccess: async (_data, template) => {
-      if (selectedId === template.id) {
-        setSelectedId(null);
-        setDirty(false);
-      }
-      // 只失效列表与跨页数据；已删除模板的详情不再请求，避免 404
-      queryClient.removeQueries({ queryKey: templateKeys.detail(template.id) });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: templateKeys.list() }),
-        queryClient.invalidateQueries({ queryKey: ['semester'] }),
-        queryClient.invalidateQueries({ queryKey: ['board'] }),
-        queryClient.invalidateQueries({ queryKey: ['schedules'] }),
-        queryClient.invalidateQueries({ queryKey: ['recommend'] }),
-      ]);
-      setDeleteTarget(null);
-      setActionError(null);
-      setStatusMessage('已删除模板「' + template.name + '」');
-    },
-    onError: (error) => setActionError(getErrorMessage(error)),
-  });
-
-  function handleSelect(id: number) {
-    if (id === selectedId) return;
-    if (dirty) {
-      setPendingSelectId(id);
-      return;
-    }
-    setDirty(false);
-    setSelectedId(id);
+  function save() {
+    setError(null);
+    const payload: SlotInput[] = rows.map((row, index) => ({
+      label: row.label.trim() || `第 ${index + 1} 段`,
+      startTime: row.startTime || null,
+      endTime: row.endTime || null,
+      dayPart: row.dayPart,
+      durationMin: row.durationMin,
+      sortOrder: index + 1,
+    }));
+    saveMutation.mutate(payload);
   }
 
-  function confirmDiscardAndSwitch() {
-    if (pendingSelectId === null) return;
-    setDirty(false);
-    setSelectedId(pendingSelectId);
-    setPendingSelectId(null);
+  if (semesterQuery.isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-72 w-full" />
+      </div>
+    );
   }
 
-  const busy = activateMutation.isPending || deleteMutation.isPending;
-  const activeTemplate = templates.find((template) => template.isActive) ?? null;
-  const currentPersonalTemplateId = profileQuery.data?.user.templateId ?? templates.find(t => t.isOrgTemplate)?.id ?? null;
-  const canEdit = (template: SlotTemplate) => template.ownerEmail === session.email || (isAdmin && template.isOrgTemplate);
-  const groups = [
-    { key: 'presets', title: '预设时间类型', description: '内置预设只读，可作为创建个人表的基础。', templates: templates.filter(t => t.ownerEmail === null && !t.isOrgTemplate), emptyText: '没有预设模板。' },
-    { key: 'org', title: '组织时间类型', description: '组织成员共享的时间结构；仅管理员可维护。', templates: templates.filter(t => t.isOrgTemplate), emptyText: '组织尚未设置时间类型。' },
-    { key: 'mine', title: '我的表', description: '你创建的个人安排模板。', templates: templates.filter(t => t.ownerEmail === session.email), emptyText: '尚未创建个人表。', emptyActionLabel: '创建我的表' },
-    ...(isAdmin ? [{ key: 'members', title: '成员个人表', description: '查看组织成员创建的表。', templates: templates.filter(t => t.ownerEmail !== null && t.ownerEmail !== session.email), emptyText: '成员尚未创建个人表。' }] : []),
-  ];
+  if (templateId === null) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader eyebrow="时间段" title="时间块" />
+        <EmptyState
+          icon={<Clock3 className="h-5 w-5" aria-hidden />}
+          title="当前学期还没有时间表"
+          description="先在「设置」里创建学期，系统会自动生成一套默认时间段，然后回到这里调整。"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-base font-semibold tracking-tight text-ink">时间段模板</h1>
-            {activeTemplate ? <AlertInlineTemplate name={activeTemplate.name} /> : <span className="text-2xs text-amber">未启用模板</span>}
-          </div>
-          <p className="mt-0.5 text-xs text-muted">
-            模板决定看板的行（时间段）。预设模板只读，可克隆后编辑；切换模板前请确认旧模板的安排是否已处理。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            iconLeft={<RefreshCw className="h-4 w-4" aria-hidden />}
-            aria-label="刷新模板"
-            onClick={() => void templatesQuery.refetch()}
-            disabled={templatesQuery.isFetching}
-          >
-            刷新
-          </Button>
-          <Button variant="primary" iconLeft={<Layers className="h-4 w-4" aria-hidden />} onClick={() => setFormState({ mode: 'create' })}>
-            新建模板
-          </Button>
-        </div>
-      </header>
-
-      {statusMessage ? (
-        <Alert
-          tone="success"
-          action={
-            <Button variant="ghost" size="sm" onClick={() => setStatusMessage(null)}>
-              关闭
-            </Button>
-          }
-        >
-          {statusMessage}
-        </Alert>
-      ) : null}
-
-      {actionError ? (
-        <Alert
-          tone="danger"
-          title="操作未完成"
-          action={
-            <Button variant="ghost" size="sm" onClick={() => setActionError(null)}>
-              关闭
-            </Button>
-          }
-        >
-          {actionError}
-        </Alert>
-      ) : null}
-
-      {!templatesQuery.isPending && !templatesQuery.isError && activeTemplate === null ? (
-        <Alert tone="warning" title="当前学期尚未启用时间段模板">
-          在左侧选择一个模板并点击「使用」，看板与推荐才会生成格子。
-        </Alert>
-      ) : null}
-
-      {templatesQuery.isPending ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <Card className="p-3">
-            <Skeleton className="h-5 w-24" />
-            <div className="mt-3 space-y-2">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Skeleton key={index} className="h-14 w-full" />
-              ))}
-            </div>
-          </Card>
-          <Card className="p-4">
-            <Skeleton className="h-6 w-40" />
-            <div className="mt-4 space-y-2">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <Skeleton key={index} className="h-9 w-full" />
-              ))}
-            </div>
-          </Card>
-        </div>
-      ) : templatesQuery.isError ? (
-        <Alert
-          tone="danger"
-          title="模板列表加载失败"
-          action={
-            <Button variant="secondary" size="sm" onClick={() => void templatesQuery.refetch()}>
-              重试
-            </Button>
-          }
-        >
-          {getErrorMessage(templatesQuery.error)}
-        </Alert>
-      ) : templates.length === 0 ? (
-        <EmptyState
-          icon={<CalendarClock className="h-5 w-5" aria-hidden />}
-          title="没有可用模板"
-          description="正常情况下应预置若干模板；也可以先新建一个空模板，再逐个添加时间段。"
-          action={
-            <Button variant="primary" onClick={() => setFormState({ mode: 'create' })}>
-              新建模板
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <TemplateList
-            groups={groups}
-            selectedId={selectedId}
-            busy={busy || setMineMutation.isPending}
-            isAdmin={isAdmin}
-            canEdit={canEdit}
-            currentPersonalTemplateId={currentPersonalTemplateId}
-            onSelect={handleSelect}
-            onCreate={() => setFormState({ mode: 'create' })}
-            onUse={(template) => template.isOrgTemplate ? activateMutation.mutate({ template, force: false }) : setMineMutation.mutate(template.id)}
-            onSetMine={(template) => setMineMutation.mutate(template.id)}
-            onClone={(template) => setFormState({ mode: 'clone', source: template })}
-            onRename={(template) => setFormState({ mode: 'rename', source: template })}
-            onDelete={(template) => { setActionError(null); setDeleteTarget(template); }}
-          />
-
-          {detailQuery.isPending ? (
-            <Card className="p-4">
-              <Skeleton className="h-6 w-40" />
-              <div className="mt-4 space-y-2">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Skeleton key={index} className="h-9 w-full" />
-                ))}
-              </div>
-            </Card>
-          ) : detailQuery.isError ? (
-            <Alert
-              tone="danger"
-              title="模板详情加载失败"
-              action={
-                <Button variant="secondary" size="sm" onClick={() => void detailQuery.refetch()}>
-                  重试
-                </Button>
-              }
+      <PageHeader
+        eyebrow="时间段"
+        title="时间块"
+        description="社团一周按这些时间块对齐：成员课表、空闲统计、活动时间都基于它们。"
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              iconLeft={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+              onClick={() => void detailQuery.refetch()}
             >
-              {getErrorMessage(detailQuery.error)}
-            </Alert>
-          ) : detailQuery.data ? (
-            <SlotEditor
-              key={detailQuery.data.template.id}
-              detail={detailQuery.data}
-              canEdit={canEdit(detailQuery.data.template)}
-              readOnlyHint={detailQuery.data.template.isOrgTemplate ? '组织模板仅管理员可编辑。' : detailQuery.data.template.ownerEmail === null ? '预设模板只读，可克隆后编辑。' : '仅创建者或管理员可编辑。'}
-              onClone={() => setFormState({ mode: 'clone', source: detailQuery.data.template })}
-              onSaved={(message) => {
-                setDirty(false);
-                setActionError(null);
-                setStatusMessage(message);
-              }}
-              onDirtyChange={setDirty}
-            />
-          ) : null}
+              刷新
+            </Button>
+            <Button
+              iconLeft={<Save className="h-4 w-4" aria-hidden />}
+              onClick={save}
+              loading={saveMutation.isPending}
+              disabled={rows.length === 0}
+            >
+              {saved ? '已保存' : '保存'}
+            </Button>
+          </>
+        }
+      />
+
+      {error ? <p className="rounded-control bg-red-50 px-3 py-2 text-xs text-danger">{error}</p> : null}
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-medium text-ink">
+            <Clock3 className="h-4 w-4 text-brand" aria-hidden />
+            {detailQuery.data?.template.name ?? '时间表'}
+            <Badge tone="outline">{rows.length} 个时间段</Badge>
+          </div>
+          <Button variant="ghost" size="sm" iconLeft={<Plus className="h-3.5 w-3.5" aria-hidden />} onClick={addRow}>
+            添加时间段
+          </Button>
         </div>
-      )}
 
-      {formState ? (
-        <TemplateFormDialog
-          mode={formState.mode}
-          source={formState.source}
-          onClose={() => setFormState(null)}
-          onSaved={(message, templateId) => {
-            setFormState(null);
-            setDirty(false);
-            setStatusMessage(message);
-            if (formState.mode !== 'rename') setSelectedId(templateId);
-          }}
-        />
-      ) : null}
-
-      {pendingSelectId !== null ? (
-        <Dialog
-          open
-          onClose={() => setPendingSelectId(null)}
-          size="sm"
-          title="有未保存的时间段修改"
-          footer={
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setPendingSelectId(null)}>
-                继续编辑
-              </Button>
-              <Button variant="danger" onClick={confirmDiscardAndSwitch}>
-                放弃修改并切换
-              </Button>
-            </div>
-          }
-        >
-          <p className="text-xs leading-5 text-muted">
-            当前模板的时间段尚未保存。切换模板会丢失这些修改，确定继续吗？
-          </p>
-        </Dialog>
-      ) : null}
-
-      {forcePrompt ? (
-        <Dialog
-          open
-          onClose={() => setForcePrompt(null)}
-          size="sm"
-          title="旧模板仍有安排"
-          footer={
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setForcePrompt(null)}>
-                取消
-              </Button>
-              <Button
-                variant="danger"
-                loading={activateMutation.isPending}
-                onClick={() => activateMutation.mutate({ template: forcePrompt.template, force: true })}
-              >
-                强制切换
-              </Button>
-            </div>
-          }
-        >
-          <div className="space-y-3">
-            <Alert tone="warning" title={'旧模板仍有 ' + forcePrompt.count + ' 条安排'}>
-              切换后这些安排不会显示在新模板的看板上，但仍保留在数据库中。切回旧模板即可恢复显示。
-            </Alert>
-            <p className="text-xs leading-5 text-muted">
-              如果希望保留当前安排，请先在看板中清理旧模板的占用，或取消本次切换。
-            </p>
+        {detailQuery.isPending ? (
+          <div className="p-4">
+            <Skeleton className="h-40 w-full" />
           </div>
-        </Dialog>
-      ) : null}
-
-      {deleteTarget ? (
-        <Dialog
-          open
-          onClose={() => {
-            if (!deleteMutation.isPending) setDeleteTarget(null);
-          }}
-          size="sm"
-          title="删除模板"
-          footer={
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
-                取消
-              </Button>
-              <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate(deleteTarget)}>
-                确认删除
-              </Button>
-            </div>
-          }
-        >
-          <div className="space-y-3">
-            {deleteMutation.isError ? <Alert tone="danger">{getErrorMessage(deleteMutation.error)}</Alert> : null}
-            <Alert tone="danger" title="删除后不可恢复">
-              将删除模板「{deleteTarget.name}」及其 {deleteTarget.slotCount} 个时间段。
-            </Alert>
-            <p className="text-xs leading-5 text-muted">被学期使用或被安排引用的模板无法删除；此时可先切换模板或清理安排。</p>
-          </div>
-        </Dialog>
-      ) : null}
+        ) : rows.length === 0 ? (
+          <EmptyState compact title="还没有时间段" description="点右上角「添加时间段」开始定义。" />
+        ) : (
+          <table className="w-full border-collapse text-xs">
+            <thead className="bg-canvas text-2xs text-subtle">
+              <tr>
+                <th className="w-[28%] px-3 py-2 text-left font-medium">名称</th>
+                <th className="px-3 py-2 text-left font-medium">开始</th>
+                <th className="px-3 py-2 text-left font-medium">结束</th>
+                <th className="px-3 py-2 text-left font-medium">时段</th>
+                <th className="px-3 py-2 text-left font-medium">时长（分钟）</th>
+                <th className="w-10 px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.key} className="border-t border-line">
+                  <td className="px-3 py-1.5">
+                    <Input value={row.label} maxLength={20} onChange={(event) => patchRow(row.key, { label: event.target.value })} />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <Input type="time" value={row.startTime} onChange={(event) => patchRow(row.key, { startTime: event.target.value })} />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <Input type="time" value={row.endTime} onChange={(event) => patchRow(row.key, { endTime: event.target.value })} />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <Select value={row.dayPart} onChange={(event) => patchRow(row.key, { dayPart: event.target.value as DayPart })}>
+                      {DAY_PARTS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <Input
+                      type="number"
+                      min={5}
+                      max={720}
+                      value={row.durationMin}
+                      onChange={(event) => patchRow(row.key, { durationMin: Number(event.target.value) || 90 })}
+                    />
+                  </td>
+                  <td className="px-3 py-1.5 text-right">
+                    <button
+                      type="button"
+                      aria-label="删除时间段"
+                      className="rounded-control p-1.5 text-muted hover:bg-red-50 hover:text-danger"
+                      onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="border-t border-line px-4 py-2 text-2xs text-subtle">
+          建议按社团实际作息设置，例如「午休 12:30–13:30」「晚上 19:00–21:00」。改完记得点右上角保存。
+        </div>
+      </Card>
     </div>
-  );
-}
-
-function AlertInlineTemplate({ name }: { name: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-brand-soft px-1.5 py-0.5 text-2xs font-medium text-brand">
-      当前模板：{name}
-    </span>
   );
 }

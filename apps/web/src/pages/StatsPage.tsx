@@ -1,71 +1,54 @@
+import { WEEKDAY_LABELS, type Weekday } from '@cims/shared';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Info, RefreshCw, Scale, Users as UsersIcon } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ApiError } from '../api/client';
-import { fetchFairness, statsKeys } from '../api/stats';
-import { FairnessBars } from '../components/pages/stats/FairnessBars';
-import { Alert } from '../components/ui/Alert';
+import { BarChart3, CalendarClock, ClipboardList, TrendingUp, Users } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { fetchMemberStats, fetchOverview, fetchSlotStats, statsKeys } from '../api/stats';
+import { PageHeader } from '../components/layout/PageHeader';
+import { roleLabel } from '../components/pages/members/MemberFormDialog';
+import { WeekSwitcher } from '../components/schedule/WeekSwitcher';
 import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
-import { Select } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { useSemester } from '../hooks/useSemester';
-import { getErrorMessage } from '../lib/errors';
+import { useWeekParam } from '../hooks/useWeek';
+import { cn } from '../lib/cn';
 
-interface WeekRange {
-  from: number;
-  to: number;
-}
-
-/** 公平性统计：基尼系数 / 方差 / 人均占用 + 每人横向条形图 */
+/** 统计：负责人关心的几个数——人齐不齐、课表填没填、什么时候有空。 */
 export default function StatsPage() {
-  const navigate = useNavigate();
   const semesterQuery = useSemester();
-  const totalWeeks = semesterQuery.data?.semester.totalWeeks ?? 0;
-  const [range, setRange] = useState<WeekRange | null>(null);
+  const weeks = semesterQuery.data?.weeks ?? [];
+  const currentWeek = weeks.find((item) => item.isCurrent) ?? weeks[0];
+  const { week: weekParam, setWeek } = useWeekParam(semesterQuery.data?.semester.totalWeeks);
+  const weekNo = weekParam ?? currentWeek?.weekNo ?? undefined;
+  const selectedWeek = weeks.find((item) => item.weekNo === weekNo) ?? currentWeek;
 
-  useEffect(() => {
-    if (totalWeeks > 0 && range === null) setRange({ from: 1, to: totalWeeks });
-  }, [totalWeeks, range]);
-
-  const fairnessQuery = useQuery({
-    queryKey: statsKeys.fairness(range?.from, range?.to),
-    queryFn: () => fetchFairness(range?.from, range?.to),
-    enabled: range !== null,
+  const overviewQuery = useQuery({
+    queryKey: statsKeys.overview(weekNo),
+    queryFn: () => fetchOverview(weekNo),
     staleTime: 30_000,
   });
+  const membersQuery = useQuery({ queryKey: statsKeys.members, queryFn: fetchMemberStats, staleTime: 30_000 });
+  const slotsQuery = useQuery({ queryKey: statsKeys.slots(weekNo), queryFn: () => fetchSlotStats(weekNo), staleTime: 30_000 });
 
-  const report = fairnessQuery.data;
-  const semesterMissing =
-    semesterQuery.isError && semesterQuery.error instanceof ApiError && semesterQuery.error.status === 404;
+  const overview = overviewQuery.data;
+  const members = membersQuery.data ?? [];
+  const slots = slotsQuery.data ?? [];
 
-  const totalMinutes = report ? report.users.reduce((sum, user) => sum + user.occupiedMinutes, 0) : 0;
+  const byWeekday = [1, 2, 3, 4, 5, 6, 7].map((weekday) => {
+    const items = slots.filter((slot) => slot.weekday === weekday);
+    const allFree = items.filter((slot) => slot.busy === 0 && slot.free > 0).length;
+    return { weekday: weekday as Weekday, total: items.length, allFree };
+  });
+  const maxAllFree = Math.max(...byWeekday.map((item) => item.allFree), 1);
 
-  function updateFrom(from: number) {
-    setRange((prev) => {
-      const base = prev ?? { from: 1, to: totalWeeks };
-      return { from, to: Math.max(from, base.to) };
-    });
-  }
-
-  function updateTo(to: number) {
-    setRange((prev) => {
-      const base = prev ?? { from: 1, to: totalWeeks };
-      return { from: Math.min(to, base.from), to };
-    });
-  }
-
-  const weeks = Array.from({ length: Math.max(totalWeeks, 1) }, (_, index) => index + 1);
-
-  if (semesterQuery.isPending) {
+  if (semesterQuery.isPending || overviewQuery.isPending) {
     return (
       <div className="flex flex-col gap-4">
-        <Skeleton className="h-8 w-56" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
+        <Skeleton className="h-10 w-64" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-24 w-full" />
           ))}
         </div>
@@ -74,207 +57,202 @@ export default function StatsPage() {
     );
   }
 
-  if (semesterMissing) {
-    return (
-      <EmptyState
-        icon={<BarChart3 className="h-5 w-5" aria-hidden />}
-        title="尚未配置学期"
-        description="公平性统计需要学期的周次范围，请先在「设置」中完成学期配置。"
-        action={
-          <Button variant="primary" onClick={() => navigate('/settings')}>
-            前往设置
-          </Button>
-        }
-      />
-    );
-  }
+  const fillRate =
+    overview && overview.club.members > 0 ? Math.round((overview.club.timetableFilled / overview.club.members) * 100) : 0;
 
-  if (semesterQuery.isError) {
-    return (
-      <Alert
-        tone="danger"
-        title="学期信息加载失败"
-        action={
-          <Button variant="secondary" size="sm" onClick={() => void semesterQuery.refetch()}>
-            重试
-          </Button>
-        }
-      >
-        {getErrorMessage(semesterQuery.error)}
-      </Alert>
-    );
-  }
+  const practiceTotal = overview?.practice.problems ?? 0;
+  const practiceRate = practiceTotal > 0 ? Math.round(((overview?.practice.solved ?? 0) / practiceTotal) * 100) : 0;
+  const totalParticipations = members.reduce((sum, member) => sum + member.activities, 0);
+  const memberAvgActivities = members.length > 0 ? (totalParticipations / members.length).toFixed(1) : '0';
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-base font-semibold tracking-tight text-ink">公平性统计</h1>
-            {report ? <Badge tone="neutral">{report.users.length} 位成员</Badge> : null}
-            {range ? <Badge tone="brand">第 {range.from}–{range.to} 周</Badge> : null}
-          </div>
-          <p className="mt-0.5 text-xs text-muted">
-            按占用分钟衡量分配是否均衡：基尼系数越接近 0 越均衡；连续占用过长会单独提示。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-2xs text-muted">周次区间</span>
-          <div className="w-24">
-            <Select aria-label="起始周" value={String(range?.from ?? 1)} onChange={(event) => updateFrom(Number(event.target.value))} className="h-8 text-xs">
-              {weeks.map((week) => (
-                <option key={week} value={week}>
-                  第 {week} 周
-                </option>
-              ))}
-            </Select>
-          </div>
-          <span className="text-2xs text-subtle">至</span>
-          <div className="w-24">
-            <Select aria-label="结束周" value={String(range?.to ?? totalWeeks)} onChange={(event) => updateTo(Number(event.target.value))} className="h-8 text-xs">
-              {weeks.map((week) => (
-                <option key={week} value={week}>
-                  第 {week} 周
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!range || (range.from === 1 && range.to === totalWeeks)}
-            onClick={() => setRange({ from: 1, to: totalWeeks })}
-          >
-            全学期
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            aria-label="刷新统计"
-            iconLeft={<RefreshCw className={fairnessQuery.isFetching ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} aria-hidden />}
-            onClick={() => void fairnessQuery.refetch()}
-            disabled={fairnessQuery.isFetching}
-          >
-            刷新
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="统计"
+        title="社团运行情况"
+        description="课表填得全不全、哪天最容易凑齐人、刷题练到哪了，一页看完。"
+        actions={weeks.length > 0 ? <WeekSwitcher week={selectedWeek} weeks={weeks} onChange={setWeek} /> : null}
+      />
 
-      {fairnessQuery.isError ? (
-        <Alert
-          tone="danger"
-          title="统计加载失败"
-          action={
-            <Button variant="secondary" size="sm" onClick={() => void fairnessQuery.refetch()}>
-              重试
-            </Button>
-          }
-        >
-          {getErrorMessage(fairnessQuery.error)}
-        </Alert>
-      ) : !report ? (
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-24 w-full" />
-            ))}
-          </div>
-          <Skeleton className="h-64 w-full" />
-        </div>
-      ) : report.users.length === 0 ? (
-        <EmptyState
-          icon={<UsersIcon className="h-5 w-5" aria-hidden />}
-          title="没有可统计的成员"
-          description="先到「用户」页添加启用成员，并在看板中登记占用后，这里会显示每人的占用分布。"
-          action={
-            <Button variant="primary" onClick={() => navigate('/users')}>
-              去添加成员
-            </Button>
-          }
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          icon={<Users className="h-4 w-4" aria-hidden />}
+          label="在册成员"
+          value={overview?.club.members ?? 0}
+          hint={overview ? `${overview.club.timetableFilled} 人已录课表` : ''}
         />
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <MetricCard
-              icon={<Scale className="h-4 w-4" aria-hidden />}
-              label="基尼系数"
-              value={report.gini.toFixed(3)}
-              hint={report.gini > 0.25 ? '大于 0.25，分配偏不均衡' : '越接近 0 越均衡'}
-              tone={report.gini > 0.25 ? 'warning' : 'normal'}
-            />
-            <MetricCard
-              icon={<BarChart3 className="h-4 w-4" aria-hidden />}
-              label="方差"
-              value={report.variance.toFixed(0)}
-              hint="占用分钟数的离散程度（分钟²）"
-            />
-            <MetricCard
-              icon={<Info className="h-4 w-4" aria-hidden />}
-              label="人均占用"
-              value={report.mean.toFixed(0) + ' 分钟'}
-              hint={'约 ' + (report.mean / 60).toFixed(1) + ' 小时 / 人 · 合计 ' + totalMinutes + ' 分钟'}
-            />
-          </div>
+        <KpiCard
+          icon={<ClipboardList className="h-4 w-4" aria-hidden />}
+          label="课表完整度"
+          value={`${fillRate}%`}
+          hint={overview && overview.club.timetableEmpty > 0 ? `${overview.club.timetableEmpty} 人还没录` : '已全部录入'}
+          tone={fillRate === 100 ? 'mint' : fillRate >= 60 ? 'amber' : 'danger'}
+        />
+        <KpiCard
+          icon={<CalendarClock className="h-4 w-4" aria-hidden />}
+          label={`第 ${overview?.week.weekNo ?? '-'} 周全员空闲`}
+          value={`${overview?.week.fullyFreeCells ?? 0} 段`}
+          hint="全员都没课的时段数"
+        />
+        <KpiCard
+          icon={<TrendingUp className="h-4 w-4" aria-hidden />}
+          label="刷题进度"
+          value={`${overview?.practice.solved ?? 0}/${overview?.practice.problems ?? 0}`}
+          hint={`共提交 ${overview?.practice.submissions ?? 0} 次`}
+        />
+      </div>
 
-          {report.hints.length > 0 ? (
-            <div className="space-y-2">
-              {report.hints.map((hint) => (
-                <Alert key={hint} tone="warning" title="均衡提示">
-                  {hint}
-                </Alert>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-ink">成员课表填写情况</div>
+            <Badge tone="outline">{members.length} 人</Badge>
+          </div>
+          {members.length === 0 ? (
+            <p className="mt-3 text-xs text-muted">还没有成员。</p>
+          ) : (
+            <div className="mt-2 flex flex-col divide-y divide-line">
+              {members.map((member) => (
+                <div key={member.id} className="flex items-center justify-between gap-2 py-1.5 text-xs">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: member.color }} aria-hidden />
+                    <span className="truncate text-ink">{member.name}</span>
+                    <Badge tone="neutral">{roleLabel(member.role)}</Badge>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 text-muted">
+                    {member.schedules === 0 ? <Badge tone="danger">未录课表</Badge> : <span>{member.schedules} 节课</span>}
+                    {member.busiestWeekday ? (
+                      <span className="text-subtle">最忙 {WEEKDAY_LABELS[member.busiestWeekday as Weekday]}</span>
+                    ) : null}
+                  </div>
+                </div>
               ))}
             </div>
-          ) : report.users.length < 3 ? (
-            <Alert tone="info" title="样本较少，不做均衡性判定">
-              当前只有 {report.users.length} 位启用成员。基尼系数与提示规则需要至少 3 人参考，数据仅供观察。
-            </Alert>
-          ) : totalMinutes === 0 ? (
-            <Alert tone="info" title="所选区间内没有占用记录">
-              调整周次区间，或到看板为成员登记占用后再查看统计。
-            </Alert>
-          ) : (
-            <Alert tone="success" title="未发现明显不均衡">
-              基尼系数未超过 0.25，也没有成员单日连续占用超过 300 分钟。
-            </Alert>
           )}
+        </Card>
 
-          <Card className="overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
-              <h2 className="text-xs font-semibold text-ink">每人占用分布</h2>
-              <span className="text-2xs text-subtle">条形长度按占用分钟数相对最大值；右侧为占总量比例</span>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-ink">
+            <BarChart3 className="h-4 w-4 text-brand" aria-hidden />
+            哪天最容易凑齐人
+          </div>
+          <p className="mt-1 text-2xs text-subtle">按「全员都空」的时段数量排序</p>
+          {slots.length === 0 ? (
+            <EmptyState compact title="暂无数据" description="先创建学期与时间段。" className="mt-3" />
+          ) : (
+            <div className="mt-3 flex flex-col gap-2">
+              {byWeekday.map((item) => (
+                <div key={item.weekday} className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-2xs text-muted">{WEEKDAY_LABELS[item.weekday]}</span>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-canvas">
+                    <div
+                      className={cn('h-full rounded-full', item.allFree === 0 ? 'bg-slate-200' : 'bg-brand')}
+                      style={{ width: `${Math.round((item.allFree / maxAllFree) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-2xs text-muted">
+                    {item.allFree}/{item.total} 段
+                  </span>
+                </div>
+              ))}
             </div>
-            <FairnessBars report={report} />
-            <div className="border-t border-line bg-canvas px-4 py-2">
-              <p className="text-2xs leading-5 text-subtle">
-                「最大连续占用」按同一周、同一天的相邻时间段合并计算；超过 300 分钟会标记为偏长。
-              </p>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-ink">
+              <CalendarClock className="h-4 w-4 text-brand" aria-hidden />
+              活动开展情况
             </div>
-          </Card>
-        </>
-      )}
+            <Link to="/activities" className="text-2xs text-brand hover:underline">
+              去活动页 →
+            </Link>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <StatBlock label="全部" value={overview?.activities.total ?? 0} />
+            <StatBlock label="待进行" value={overview?.activities.upcoming ?? 0} tone="amber" />
+            <StatBlock label="已完成" value={overview?.activities.done ?? 0} tone="mint" />
+          </div>
+          <p className="mt-3 text-2xs leading-5 text-subtle">
+            {(overview?.activities.total ?? 0) === 0
+              ? '还没有活动记录。可以先去「空闲时间」找一个全员都空的时段，一键排活动。'
+              : `平均每位成员参与 ${memberAvgActivities} 场活动。`}
+          </p>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-ink">
+              <TrendingUp className="h-4 w-4 text-brand" aria-hidden />
+              刷题训练情况
+            </div>
+            <Link to="/practice" className="text-2xs text-brand hover:underline">
+              去题库 →
+            </Link>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between text-2xs text-muted">
+              <span>
+                已通过 <span className="text-sm font-semibold text-ink">{overview?.practice.solved ?? 0}</span> /{' '}
+                {overview?.practice.problems ?? 0} 题
+              </span>
+              <span>提交 {overview?.practice.submissions ?? 0} 次</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-canvas">
+              <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${practiceRate}%` }} />
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <Badge tone="mint">已通过 {overview?.practice.solved ?? 0} 题</Badge>
+            <Badge tone="amber">练过未过 {overview?.practice.attempted ?? 0} 题</Badge>
+            <Badge tone="neutral">待开始 {Math.max((overview?.practice.problems ?? 0) - (overview?.practice.solved ?? 0) - (overview?.practice.attempted ?? 0), 0)} 题</Badge>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
 
-interface MetricCardProps {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  hint: string;
-  tone?: 'normal' | 'warning';
+function StatBlock({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'mint' | 'amber' }) {
+  const valueClass = { neutral: 'text-ink', mint: 'text-mint', amber: 'text-amber' }[tone];
+  return (
+    <div className="rounded-control border border-line bg-canvas px-2 py-2">
+      <div className={cn('text-lg font-semibold tabular-nums', valueClass)}>{value}</div>
+      <div className="text-2xs text-subtle">{label}</div>
+    </div>
+  );
 }
 
-function MetricCard({ icon, label, value, hint, tone = 'normal' }: MetricCardProps) {
+function KpiCard({
+  icon,
+  label,
+  value,
+  hint,
+  tone = 'brand',
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  tone?: 'brand' | 'mint' | 'amber' | 'danger';
+}) {
+  const toneClass = {
+    brand: 'text-brand bg-brand-soft',
+    mint: 'text-mint bg-emerald-50',
+    amber: 'text-amber bg-amber-50',
+    danger: 'text-danger bg-red-50',
+  }[tone];
   return (
-    <Card className="px-4 py-3">
-      <div className="flex items-center gap-1.5 text-2xs text-muted">
-        <span className={tone === 'warning' ? 'text-amber' : 'text-brand'}>{icon}</span>
-        <span>{label}</span>
+    <Card className="p-3.5">
+      <div className="flex items-center gap-2">
+        <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg', toneClass)}>{icon}</span>
+        <span className="text-2xs text-muted">{label}</span>
       </div>
-      <div className={'tabular mt-1 text-xl font-semibold tracking-tight ' + (tone === 'warning' ? 'text-amber' : 'text-ink')}>
-        {value}
-      </div>
-      <div className="mt-0.5 text-2xs text-subtle">{hint}</div>
+      <div className="mt-2 text-xl font-semibold tracking-tight text-ink">{value}</div>
+      {hint ? <div className="mt-0.5 text-2xs text-subtle">{hint}</div> : null}
     </Card>
   );
 }

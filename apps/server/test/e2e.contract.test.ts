@@ -156,11 +156,11 @@ describe('FreeShift 端到端契约', () => {
     expect(Array.isArray(alternatives.body.data.cells)).toBe(true);
   });
 
-  it('公平性统计与 CSV 导出导入', async () => {
-    const fairness = await call('GET', '/api/v1/stats/fairness?from_week=1&to_week=8');
-    expect(fairness.status).toBe(200);
-    expect(fairness.body.data.users.length).toBeGreaterThanOrEqual(3);
-    expect(typeof fairness.body.data.gini).toBe('number');
+  it('社团统计与 CSV 导出导入', async () => {
+    const overview = await call('GET', '/api/v1/stats/overview');
+    expect(overview.status).toBe(200);
+    expect(overview.body.data.club.members).toBeGreaterThanOrEqual(3);
+    expect(typeof overview.body.data.week.fullyFreeCells).toBe('number');
 
     const exported = await call('GET', '/api/v1/export/schedules');
     expect(exported.status).toBe(200);

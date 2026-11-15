@@ -1,7 +1,7 @@
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { resetData } from '../../../api/org';
+import { resetData } from '../../../api/data';
 import { getErrorMessage } from '../../../lib/errors';
 import { Alert } from '../../ui/Alert';
 import { Button } from '../../ui/Button';
@@ -14,7 +14,7 @@ export interface ResetDataPanelProps {
 
 const CONFIRM_WORD = '重置';
 
-/** 危险区：清空当前组织的安排与成员数据（二次确认，不可撤销） */
+/** 危险区：清空本社团的成员、课表与活动（二次确认，不可撤销） */
 export function ResetDataPanel({ onDone }: ResetDataPanelProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -24,7 +24,7 @@ export function ResetDataPanel({ onDone }: ResetDataPanelProps) {
   const resetMutation = useMutation({
     mutationFn: () => resetData(),
     onSuccess: (result) => {
-      for (const key of ['board', 'schedules', 'stats', 'recommend', 'users', 'templates', 'semester', 'org']) {
+      for (const key of ['board', 'schedules', 'stats', 'users', 'templates', 'semester', 'club', 'activities', 'free']) {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
       setOpen(false);
@@ -46,10 +46,10 @@ export function ResetDataPanel({ onDone }: ResetDataPanelProps) {
     <>
       <div className="space-y-3">
         <Alert tone="danger" title="重置数据不可撤销">
-          重置会清空当前组织下的全部时段安排与成员数据（保留组织本身与你的登录身份）。建议先在上方导出 CSV 备份。
+          重置会清空本社团全部成员、课表安排与活动记录（社团档案与题库题目保留）。建议先在上方导出 CSV 备份。
         </Alert>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-2xs leading-5 text-subtle">如果你不是组织负责人，请让负责人执行重置。</p>
+          <p className="text-2xs leading-5 text-subtle">只在想从零开始时使用，例如新学期换了整批成员。</p>
           <Button variant="danger" iconLeft={<RotateCcw className="h-4 w-4" aria-hidden />} onClick={() => setOpen(true)}>
             重置数据
           </Button>
@@ -83,7 +83,7 @@ export function ResetDataPanel({ onDone }: ResetDataPanelProps) {
       >
         <div className="flex flex-col gap-3">
           <Alert tone="danger" title="即将删除的内容">
-            当前组织的全部时段安排、成员记录与统计数据。删除后无法恢复。
+            本社团全部成员的课表安排、成员记录与活动记录。社团档案、时间段设置与题库题目会保留。删除后无法恢复。
           </Alert>
           <Field label={`输入「${CONFIRM_WORD}」以确认`} htmlFor="reset-confirm" required>
             <Input

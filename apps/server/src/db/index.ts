@@ -74,6 +74,31 @@ export function migrate(db: DatabaseSyncInstance): void {
     if (!columnsOf('app_user').has('template_id')) {
       db.exec('ALTER TABLE app_user ADD COLUMN template_id INTEGER REFERENCES slot_template(id) ON DELETE SET NULL');
     }
+    // 社团档案字段（单机单人，不再有邀请码/加入审批）
+    for (const [column, ddl] of [
+      ['description', "TEXT NOT NULL DEFAULT ''"],
+      ['owner_name', "TEXT NOT NULL DEFAULT ''"],
+      ['contact', "TEXT NOT NULL DEFAULT ''"],
+    ] as const) {
+      if (!columnsOf('organization').has(column)) db.exec('ALTER TABLE organization ADD COLUMN ' + column + ' ' + ddl);
+    }
+    // 成员档案字段
+    for (const [column, ddl] of [
+      ['grade', "TEXT NOT NULL DEFAULT ''"],
+      ['major', "TEXT NOT NULL DEFAULT ''"],
+      ['phone', "TEXT NOT NULL DEFAULT ''"],
+      ['role', "TEXT NOT NULL DEFAULT 'member'"],
+      ['joined_at', "TEXT NOT NULL DEFAULT ''"],
+    ] as const) {
+      if (!columnsOf('app_user').has(column)) db.exec('ALTER TABLE app_user ADD COLUMN ' + column + ' ' + ddl);
+    }
+    db.exec("UPDATE app_user SET role = 'leader' WHERE email = 'local@club' AND role = 'member'");
+    if (hasTable('activity') && hasTable('activity_member')) {
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS ix_activity_date ON activity(org_id, activity_date);' +
+          'CREATE INDEX IF NOT EXISTS ix_activity_member_user ON activity_member(user_id);',
+      );
+    }
     // Rebuild both formerly globally unique name tables, preserving IDs and FK targets.
     for (const table of ['app_user', 'slot_template']) {
       const definition = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table) as { sql: string }).sql;

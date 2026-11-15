@@ -1,4 +1,15 @@
-import type { AppUser, Schedule, Semester, SlotTemplate, TimeSlot, WeekParity } from '@cims/shared';
+import type {
+  Activity,
+  ActivityKind,
+  ActivityStatus,
+  AppUser,
+  MemberRole,
+  Schedule,
+  Semester,
+  SlotTemplate,
+  TimeSlot,
+  WeekParity,
+} from '@cims/shared';
 
 export interface SemesterRow {
   id: number;
@@ -45,9 +56,29 @@ export interface UserRow {
   is_active: number;
   sort_order: number;
   email?: string | null;
+  grade?: string;
+  major?: string;
+  phone?: string;
+  role?: MemberRole;
+  joined_at?: string;
   template_id?: number | null;
   /** 联表查询时带出的个人表模板名 */
   template_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityRow {
+  id: number;
+  org_id?: number;
+  title: string;
+  kind: ActivityKind;
+  status: ActivityStatus;
+  activity_date: string;
+  start_time: string;
+  end_time: string;
+  location: string;
+  note: string;
   created_at: string;
   updated_at: string;
 }
@@ -123,6 +154,11 @@ export function mapUser(row: UserRow): AppUser {
     sortOrder: Number(row.sort_order),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    grade: row.grade ?? '',
+    major: row.major ?? '',
+    phone: row.phone ?? '',
+    role: (row.role ?? 'member') as MemberRole,
+    joinedAt: row.joined_at ?? '',
     email: row.email ?? null,
     templateId: row.template_id === null || row.template_id === undefined ? null : Number(row.template_id),
     templateName: row.template_name ?? null,
@@ -139,6 +175,23 @@ export function mapSchedule(row: ScheduleRow): Schedule {
     startWeek: Number(row.start_week),
     endWeek: Number(row.end_week),
     parity: row.parity,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapActivity(row: ActivityRow, participantIds: number[] = []): Activity {
+  return {
+    id: Number(row.id),
+    title: row.title,
+    kind: row.kind,
+    status: row.status,
+    date: row.activity_date,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    location: row.location,
+    participantIds,
     note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS organization (
   name TEXT NOT NULL,
   code TEXT NOT NULL UNIQUE,
   owner_email TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  owner_name  TEXT NOT NULL DEFAULT '',
+  contact     TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   -- 组织确定的时间类型模板（创建组织时必选）
   template_id INTEGER REFERENCES slot_template(id) ON DELETE SET NULL
@@ -69,8 +72,14 @@ CREATE TABLE IF NOT EXISTS app_user (
   note       TEXT    NOT NULL DEFAULT '',
   is_active  INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   sort_order INTEGER NOT NULL DEFAULT 0,
-  -- 登录邮箱（组织内唯一）；历史遗留成员可能为 NULL
+  -- 登录邮箱（组织内唯一）；本地模式不再使用，保留列以兼容旧库
   email      TEXT,
+  -- 社团成员档案字段
+  grade      TEXT    NOT NULL DEFAULT '',
+  major      TEXT    NOT NULL DEFAULT '',
+  phone      TEXT    NOT NULL DEFAULT '',
+  role       TEXT    NOT NULL DEFAULT 'member' CHECK (role IN ('leader', 'minister', 'staff', 'member')),
+  joined_at  TEXT    NOT NULL DEFAULT '',
   -- 该成员当前的个人表模板（缺省 = 组织模板，共享同一行）
   template_id INTEGER REFERENCES slot_template(id) ON DELETE SET NULL,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -126,6 +135,30 @@ CREATE TABLE IF NOT EXISTS judge_submission (
 );
 CREATE INDEX IF NOT EXISTS ix_judge_submission_problem ON judge_submission(problem_id, id DESC);
 CREATE INDEX IF NOT EXISTS ix_judge_submission_created ON judge_submission(created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS activity (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id      INTEGER NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  title       TEXT    NOT NULL,
+  kind        TEXT    NOT NULL DEFAULT 'meeting' CHECK (kind IN ('meeting', 'training', 'event', 'other')),
+  status      TEXT    NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'done', 'canceled')),
+  activity_date TEXT  NOT NULL,
+  start_time  TEXT    NOT NULL DEFAULT '',
+  end_time    TEXT    NOT NULL DEFAULT '',
+  location    TEXT    NOT NULL DEFAULT '',
+  note        TEXT    NOT NULL DEFAULT '',
+  created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS ix_activity_date ON activity(org_id, activity_date);
+
+CREATE TABLE IF NOT EXISTS activity_member (
+  activity_id INTEGER NOT NULL REFERENCES activity(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+  PRIMARY KEY (activity_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS ix_activity_member_user ON activity_member(user_id);
 
 CREATE TABLE IF NOT EXISTS algo_config (
   id           INTEGER PRIMARY KEY CHECK (id = 1),

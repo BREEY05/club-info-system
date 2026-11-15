@@ -1,6 +1,4 @@
 import type {
-  AppUser,
-  MyProfile,
   SemesterOverview,
   SlotInput,
   SlotTemplate,
@@ -74,17 +72,6 @@ export async function updateSlot(slotId: number, patch: Partial<SlotInput>): Pro
 
 export async function deleteSlot(slotId: number): Promise<void> {
   await api.delete('/slots/' + slotId);
-}
-
-/** GET /users/me：本人资料 + 个人表时间段（用于标记「当前个人表」） */
-export function fetchMyProfile(): Promise<MyProfile> {
-  return api.get<MyProfile>('/users/me');
-}
-
-/** PUT /users/me/template：把自己当前使用的个人表切换为某个同类型模板 */
-export async function setMyTemplate(templateId: number): Promise<AppUser> {
-  const data = await api.put<{ user: AppUser }>('/users/me/template', { templateId });
-  return data.user;
 }
 
 /** 409 冲突里携带的安排条数（TEMPLATE_IN_USE / SLOT_IN_USE 的 details.scheduleCount） */

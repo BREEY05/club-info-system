@@ -13,7 +13,7 @@ import { ScheduleFormDialog } from '../../schedule/ScheduleFormDialog';
 import { ScheduleSkeleton } from '../../schedule/ScheduleSkeleton';
 import { Skeleton } from '../../ui/Skeleton';
 import { UserAvatar } from '../../schedule/UserChip';
-import { OrgRequiredNotice } from '../../layout/OrgRequiredNotice';
+import { getErrorMessage } from '../../../lib/errors';
 import { PersonalGrid } from './PersonalGrid';
 
 type FormState =
@@ -61,7 +61,19 @@ export function PersonalBoardPanel({ userId, week, editable = false, onSaved }: 
   }
 
   if (boardQuery.isError || !board) {
-    return <OrgRequiredNotice error={boardQuery.error} title="个人表加载失败" />;
+    return (
+      <Alert
+        tone="danger"
+        title="课表加载失败"
+        action={
+          <Button variant="secondary" size="sm" onClick={() => void boardQuery.refetch()}>
+            重试
+          </Button>
+        }
+      >
+        {getErrorMessage(boardQuery.error)}
+      </Alert>
+    );
   }
 
   const sortedSlots = [...board.slots].sort((a, b) => a.sortOrder - b.sortOrder);

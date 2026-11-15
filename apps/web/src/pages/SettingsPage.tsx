@@ -1,7 +1,6 @@
 import { AlertTriangle, CalendarDays, Database, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { SemesterOverview } from '@cims/shared';
-import { useSession } from '../auth/session';
 import { ApiError } from '../api/client';
 import { DataTransferPanel } from '../components/pages/settings/DataTransferPanel';
 import { ResetDataPanel } from '../components/pages/settings/ResetDataPanel';
@@ -13,33 +12,10 @@ import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
 import { useSemester } from '../hooks/useSemester';
-import { OrgRequiredNotice, isNoOrgError, isPendingApprovalError } from '../components/layout/OrgRequiredNotice';
 import { getErrorMessage } from '../lib/errors';
-
-function ReadOnlySemesterPanel({ overview }: { overview: SemesterOverview }) {
-  const { semester } = overview;
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <CalendarDays className="h-4 w-4 text-brand" aria-hidden />
-        <div>
-          <h2 className="text-xs font-semibold text-ink">当前时间设置</h2>
-          <p className="mt-0.5 text-2xs text-muted">普通成员只读；如需调整请联系组织管理员。</p>
-        </div>
-      </div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-2xs sm:grid-cols-4">
-        <div><dt className="text-subtle">学期</dt><dd className="mt-0.5 font-medium text-ink">{semester.name}</dd></div>
-        <div><dt className="text-subtle">开始日期</dt><dd className="tabular mt-0.5 font-medium text-ink">{semester.startDate}</dd></div>
-        <div><dt className="text-subtle">总周次</dt><dd className="tabular mt-0.5 font-medium text-ink">{semester.totalWeeks} 周</dd></div>
-        <div><dt className="text-subtle">第 1 周</dt><dd className="mt-0.5 font-medium text-ink">{semester.week1Parity === 'odd' ? '单周' : '双周'}</dd></div>
-      </dl>
-    </Card>
-  );
-}
 
 /** 设置：学期表单、CSV 导入导出、运行信息与危险区说明 */
 export default function SettingsPage() {
-  const { isAdmin } = useSession();
   const semesterQuery = useSemester();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -62,7 +38,7 @@ export default function SettingsPage() {
             <h1 className="text-base font-semibold tracking-tight text-ink">设置</h1>
             {overview ? <span className="text-2xs text-subtle">{overview.semester.name} · {overview.semester.totalWeeks} 周</span> : null}
           </div>
-          <p className="mt-0.5 text-xs text-muted">{isAdmin ? '配置学期周历、导入导出 CSV，并查看服务运行信息。' : '查看组织时间与基础运行信息；时间设置由管理员维护。'}</p>
+          <p className="mt-0.5 text-xs text-muted">配置学期周历、时间段、数据备份恢复，并查看本机运行信息。</p>
         </div>
         <Button
           variant="secondary"
@@ -107,22 +83,18 @@ export default function SettingsPage() {
           }
         />
       ) : semesterQuery.isError || !overview ? (
-        isNoOrgError(semesterQuery.error) || isPendingApprovalError(semesterQuery.error) ? (
-          <OrgRequiredNotice error={semesterQuery.error} title="时间设置不可用" />
-        ) : (
-          <Alert
-            tone="danger"
-            title="学期信息加载失败"
-            action={
-              <Button variant="secondary" size="sm" onClick={() => void semesterQuery.refetch()}>
-                重试
-              </Button>
-            }
-          >
-            {getErrorMessage(semesterQuery.error)}
-          </Alert>
-        )
-      ) : isAdmin ? (
+        <Alert
+          tone="danger"
+          title="学期信息加载失败"
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void semesterQuery.refetch()}>
+              重试
+            </Button>
+          }
+        >
+          {getErrorMessage(semesterQuery.error)}
+        </Alert>
+      ) : (
         <>
           <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
             <SemesterForm overview={overview} onSaved={setStatusMessage} />
@@ -144,29 +116,16 @@ export default function SettingsPage() {
                 }}
               />
               <details className="rounded-control border border-line bg-canvas px-3 py-2.5">
-                <summary className="cursor-pointer text-2xs font-medium text-muted">服务器侧彻底重建数据库（运维人员）</summary>
+                <summary className="cursor-pointer text-2xs font-medium text-muted">手动重建数据库（进阶）</summary>
                 <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-2xs leading-5 text-muted">
-                  <li>停止 API 服务（如 docker compose stop api，或结束对应 Node 进程）。</li>
+                  <li>先关闭程序窗口，确保左下角显示的服务已停止。</li>
                   <li>
-                    备份并删除数据库文件：默认 <code className="rounded bg-surface px-1 py-0.5 text-ink">data/club.db</code>
-                    （若存在 -wal / -shm 文件一并删除）。
+                    打开程序目录下的 <code className="rounded bg-surface px-1 py-0.5 text-ink">data</code> 文件夹，
+                    把 <code className="rounded bg-surface px-1 py-0.5 text-ink">club.db</code> 改名备份（若有 -wal / -shm 一并移走）。
                   </li>
-                  <li>重新启动服务，迁移与种子数据会自动重建；也可用备份文件覆盖恢复。</li>
+                  <li>重新启动程序，会自动建库并写入示例学期与时间段；也可以把备份文件改回原名来恢复。</li>
                 </ol>
               </details>
-            </div>
-          </Card>
-        </>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-            <ReadOnlySemesterPanel overview={overview} />
-            <RuntimeInfoPanel />
-          </div>
-          <Card className="border-line bg-canvas">
-            <div className="flex items-start gap-3 px-4 py-3">
-              <SettingsIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
-              <div><h2 className="text-xs font-semibold text-ink">基础设置</h2><p className="mt-1 text-2xs leading-5 text-muted">CSV 导入导出、危险操作和学期调整仅对平台管理员开放。</p></div>
             </div>
           </Card>
         </>
