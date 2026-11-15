@@ -85,7 +85,13 @@ export default function StatsPage() {
           icon={<ClipboardList className="h-4 w-4" aria-hidden />}
           label="课表完整度"
           value={`${fillRate}%`}
-          hint={overview && overview.club.timetableEmpty > 0 ? `${overview.club.timetableEmpty} 人还没录` : '已全部录入'}
+          hint={
+            overview && overview.club.members === 0
+              ? '还没有成员'
+              : overview && overview.club.timetableEmpty > 0
+                ? `${overview.club.timetableEmpty} 人还没录`
+                : '已全部录入'
+          }
           tone={fillRate === 100 ? 'mint' : fillRate >= 60 ? 'amber' : 'danger'}
         />
         <KpiCard

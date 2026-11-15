@@ -224,7 +224,14 @@ export default function DashboardPage() {
                 style={{ width: `${fillRate}%` }}
               />
             </div>
-            {missingTimetable.length > 0 ? (
+            {members.length === 0 ? (
+              <div className="mt-2 text-2xs leading-5 text-muted">
+                还没有成员，先把社团名单建起来。
+                <Link to="/members" className="ml-1 text-brand hover:underline">
+                  去添加 →
+                </Link>
+              </div>
+            ) : missingTimetable.length > 0 ? (
               <div className="mt-2 text-2xs leading-5 text-muted">
                 还没录课表：
                 {missingTimetable

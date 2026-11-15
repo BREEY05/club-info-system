@@ -2,6 +2,7 @@ import type { BoardCell, Weekday } from '@cims/shared';
 import { WEEKDAY_LABELS, addDays } from '@cims/shared';
 import { CalendarPlus, Sparkles, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ActivityFormDialog } from '../components/pages/activities/ActivityFormDialog';
 import { WeekSwitcher } from '../components/schedule/WeekSwitcher';
@@ -165,7 +166,18 @@ export default function FreeTimePage() {
       {boardQuery.isPending ? (
         <Skeleton className="h-52 w-full" />
       ) : attendeeIds.length === 0 ? (
-        <EmptyState icon={<Users className="h-5 w-5" aria-hidden />} title="至少选一个人" description="取消全选后就没有可统计的对象了。" />
+        <EmptyState
+          icon={<Users className="h-5 w-5" aria-hidden />}
+          title={members.length === 0 ? '还没有成员' : '至少选一个人'}
+          description={members.length === 0 ? '先去「成员」把社团的人加进来，才能算谁有空。' : '取消全选后就没有可统计的对象了。'}
+          action={
+            members.length === 0 ? (
+              <Link to="/members">
+                <Button size="sm">去添加成员</Button>
+              </Link>
+            ) : null
+          }
+        />
       ) : perfect.length === 0 && partial.length === 0 ? (
         <EmptyState
           icon={<Sparkles className="h-5 w-5" aria-hidden />}
