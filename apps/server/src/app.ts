@@ -17,7 +17,7 @@ import { installLocalSession } from './routes/session.ts';
 import { orgRoutes } from './routes/org.ts';
 import { judgeRoutes } from './routes/judge.ts';
 
-export const APP_VERSION = process.env.APP_VERSION ?? '1.0.0';
+export const APP_VERSION = process.env.APP_VERSION ?? '1.1.0';
 
 export interface BuildAppOptions {
   logger?: boolean | { level: string };

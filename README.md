@@ -11,16 +11,25 @@
 
 ## 快速开始
 
-### Windows
+### 方式一：免安装绿色版（推荐，给不装开发环境的电脑用）
 
-双击 `start.cmd`（首次会自动安装依赖并构建前端，然后打开浏览器）。
+到 [Releases](https://github.com/BREEY05/club-info-system/releases/latest) 下载
+`club-info-system-v1.1.0-win-x64.zip`（约 32 MB），解压到任意位置（中文路径也行），
+**双击 `start.cmd`** 即可。
 
-### macOS / Linux
+- 自带 Node 运行时，**不需要**安装 Node、pnpm 或任何依赖，**不需要联网**；
+- 浏览器会自动打开 <http://127.0.0.1:3000/>，端口被占用时自动顺延；
+- 数据写在绿色版目录的 `data\club.db`，题库在 `problems\`，整个文件夹拷走即搬家。
+
+### 方式二：源码运行（开发用）
 
 ```bash
-chmod +x start.sh
-./start.sh
+pnpm install
+pnpm build
+pnpm dev            # 或 node apps/server/src/index.ts
 ```
+
+Windows 上双击 `start.cmd` 也会走这条路（首次自动装依赖 + 构建）。
 
 默认地址：<http://127.0.0.1:3000>（排课表） · <http://127.0.0.1:3000/practice>（题库）
 
@@ -28,11 +37,19 @@ chmod +x start.sh
 
 | 项目 | 要求 |
 | --- | --- |
-| Node.js | **22.18+**（用到内置 `node:sqlite` 与类型剥离，无需编译） |
-| pnpm | `npm i -g pnpm`（首次安装依赖用） |
+| Node.js | 仅源码运行需要，**22.18+**（用到内置 `node:sqlite` 与类型剥离） |
+| pnpm | 仅源码运行需要，`npm i -g pnpm` |
 | 判题语言 | 可选：Python（`python`/`python3`/`py`）、C/C++（`gcc`/`g++`，MinGW/MSYS2）、Java（`javac`+`java`） |
 
 > 没装的编译环境不会报错：题库页会显示每种语言的可用状态，未安装的语言在下拉框里自动禁用。
+
+### 自己打包绿色版
+
+```bash
+pnpm --filter @cims/web build
+node build/portable.mjs        # 产物：dist/portable/ 与 dist/club-info-system-v*-win-x64.zip
+node build/portable.mjs --no-zip
+```
 
 ---
 

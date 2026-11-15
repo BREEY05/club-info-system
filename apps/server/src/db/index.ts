@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appRoot } from '../lib/appRoot.ts';
 import { seedDefaults } from './seed-defaults.ts';
 
 /**
@@ -15,7 +16,8 @@ const { DatabaseSync } = nodeRequire('node:sqlite') as typeof import('node:sqlit
 type DatabaseSyncInstance = import('node:sqlite').DatabaseSync;
 
 const here = dirname(fileURLToPath(import.meta.url));
-export const repoRoot = resolve(here, '../../../../');
+/** 数据与题库的落地根目录（绿色版跟着程序走，源码运行跟着仓库走）。 */
+export const repoRoot = appRoot();
 
 export type SqlValue = string | number | null | bigint | Uint8Array;
 

@@ -1,6 +1,6 @@
 {
   "name": "club-info-system",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.28.5",
@@ -14,6 +14,11 @@
     "build": "pnpm --filter @cims/shared build && pnpm --filter @cims/web build",
     "typecheck": "pnpm --filter @cims/shared build && pnpm -r typecheck",
     "test": "pnpm -r test",
-    "seed": "pnpm --filter @cims/server seed"
+    "seed": "pnpm --filter @cims/server seed",
+    "portable": "node build/portable.mjs",
+    "portable:dir": "node build/portable.mjs --no-zip"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }
