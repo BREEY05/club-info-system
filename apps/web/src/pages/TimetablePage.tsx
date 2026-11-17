@@ -112,8 +112,10 @@ export default function TimetablePage() {
       totals.set(cell.weekday, (totals.get(cell.weekday) ?? 0) + cell.occupiedUserIds.length);
     }
     let best: { weekday: number; count: number } | null = null;
-    for (const [weekday, count] of totals) {
-      if (!best || count > best.count) best = { weekday, count };
+    // 按周一到周日顺序比较，人数并列时取靠前的一天
+    for (const weekday of [1, 2, 3, 4, 5, 6, 7]) {
+      const count = totals.get(weekday) ?? 0;
+      if (count > 0 && (!best || count > best.count)) best = { weekday, count };
     }
     return best && best.count > 0 ? (best.weekday as Weekday) : null;
   }, [board?.cells]);
