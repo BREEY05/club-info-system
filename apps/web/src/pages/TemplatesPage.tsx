@@ -115,7 +115,7 @@ export default function TemplatesPage() {
       startTime: row.startTime || null,
       endTime: row.endTime || null,
       dayPart: row.dayPart,
-      durationMin: row.durationMin,
+      durationMin: guessDuration(row.startTime, row.endTime, row.durationMin),
       sortOrder: index + 1,
     }));
     saveMutation.mutate(payload);
@@ -198,7 +198,7 @@ export default function TemplatesPage() {
                 <th className="px-3 py-2 text-left font-medium">开始</th>
                 <th className="px-3 py-2 text-left font-medium">结束</th>
                 <th className="px-3 py-2 text-left font-medium">时段</th>
-                <th className="px-3 py-2 text-left font-medium">时长（分钟）</th>
+                <th className="px-3 py-2 text-left font-medium">时长</th>
                 <th className="w-10 px-3 py-2" />
               </tr>
             </thead>
@@ -224,13 +224,9 @@ export default function TemplatesPage() {
                     </Select>
                   </td>
                   <td className="px-3 py-1.5">
-                    <Input
-                      type="number"
-                      min={5}
-                      max={720}
-                      value={row.durationMin}
-                      onChange={(event) => patchRow(row.key, { durationMin: Number(event.target.value) || 90 })}
-                    />
+                    <span className="tabular text-xs text-muted">
+                      {row.startTime && row.endTime ? `${row.durationMin} 分钟` : '—'}
+                    </span>
                   </td>
                   <td className="px-3 py-1.5 text-right">
                     <button
@@ -248,7 +244,7 @@ export default function TemplatesPage() {
           </table>
         )}
         <div className="border-t border-line px-4 py-2 text-2xs text-subtle">
-          建议按社团实际作息设置，例如「午休 12:30–13:30」「晚上 19:00–21:00」。改完记得点右上角保存。
+          时长按开始 / 结束时间自动计算。建议按社团实际作息设置，例如「午休 12:30–13:30」「晚上 19:00–21:00」；改完点右上角保存。
         </div>
       </Card>
     </div>

@@ -5,6 +5,8 @@ export interface MetaInfo {
   version: string;
   db: string;
   timezone: string;
+  /** 数据库文件绝对路径 */
+  dataPath: string;
 }
 
 function buildQuery(params: Record<string, number | undefined>): string {

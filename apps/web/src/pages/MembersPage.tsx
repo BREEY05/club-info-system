@@ -1,6 +1,9 @@
 import type { AppUser, UserInput } from '@cims/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Pencil, Search, Trash2, UserPlus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { fetchMemberStats, statsKeys } from '../api/stats';
 import { PageHeader } from '../components/layout/PageHeader';
 import { MemberFormDialog, roleLabel } from '../components/pages/members/MemberFormDialog';
 import { Badge } from '../components/ui/Badge';
@@ -23,6 +26,7 @@ const ROLE_TONE = {
 /** 成员管理：社团成员档案，不含任何登录/邀请概念。 */
 export default function MembersPage() {
   const usersQuery = useUsers(true);
+  const memberStatsQuery = useQuery({ queryKey: statsKeys.members, queryFn: fetchMemberStats, staleTime: 30_000 });
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
@@ -45,6 +49,11 @@ export default function MembersPage() {
   }, [members, keyword]);
 
   const activeCount = members.filter((member) => member.isActive).length;
+  const schedulesById = useMemo(
+    () => new Map((memberStatsQuery.data ?? []).map((item) => [item.id, item.schedules])),
+    [memberStatsQuery.data],
+  );
+  const missingCount = members.filter((member) => member.isActive && (schedulesById.get(member.id) ?? 0) === 0).length;
 
   function openCreate() {
     setEditing(null);
@@ -73,7 +82,7 @@ export default function MembersPage() {
       <PageHeader
         eyebrow="成员"
         title="社团成员"
-        description={`在册 ${activeCount} 人 · 含已退社共 ${members.length} 人。课表、活动参与人都从这里取。`}
+        description={`在册 ${activeCount} 人${missingCount > 0 ? ` · ${missingCount} 人还没录课表` : ' · 课表已全部录入'}。课表和活动参与人都从这份名单里取。`}
         actions={
           <Button iconLeft={<UserPlus className="h-4 w-4" aria-hidden />} onClick={openCreate}>
             添加成员
@@ -112,12 +121,13 @@ export default function MembersPage() {
           <table className="w-full table-fixed border-collapse text-sm">
             <thead>
               <tr className="border-b border-line bg-canvas text-left text-2xs font-medium uppercase tracking-wide text-subtle">
-                <th className="w-[26%] px-3 py-2">姓名</th>
-                <th className="w-[14%] px-3 py-2">职务</th>
-                <th className="w-[22%] px-3 py-2">年级 / 专业</th>
-                <th className="w-[18%] px-3 py-2">联系电话</th>
-                <th className="w-[12%] px-3 py-2">入社</th>
-                <th className="w-[8%] px-3 py-2 text-right">操作</th>
+                <th className="w-[24%] px-3 py-2">姓名</th>
+                <th className="w-[13%] px-3 py-2">职务</th>
+                <th className="w-[20%] px-3 py-2">年级 / 专业</th>
+                <th className="w-[16%] px-3 py-2">联系电话</th>
+                <th className="w-[12%] px-3 py-2">课表</th>
+                <th className="w-[11%] px-3 py-2">入社</th>
+                <th className="w-[7%] px-3 py-2 text-right">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -143,6 +153,17 @@ export default function MembersPage() {
                     {member.major ? <span className="text-subtle"> · {member.major}</span> : null}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted">{member.phone || '—'}</td>
+                  <td className="px-3 py-2.5 text-xs">
+                    {!member.isActive ? (
+                      <span className="text-subtle">—</span>
+                    ) : (schedulesById.get(member.id) ?? 0) === 0 ? (
+                      <Link to={`/timetable?member=${member.id}`} className="text-amber hover:underline">
+                        未录入
+                      </Link>
+                    ) : (
+                      <span className="tabular text-muted">{schedulesById.get(member.id)} 节</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-xs text-muted">{member.joinedAt || '—'}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-0.5">

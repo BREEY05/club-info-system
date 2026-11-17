@@ -275,8 +275,17 @@ function ProblemRow({ problem }: { problem: ProblemSummary }) {
           </p>
         </div>
         {meta ? <Badge tone={meta.tone}>{meta.short}</Badge> : null}
-        <span className="text-xs font-medium tabular-nums text-muted">
-          {problem.attempts > 0 ? `${problem.bestScore}/${problem.score}` : `${problem.score} 分`}
+        <span className="shrink-0 text-right">
+          {problem.testCount === 0 ? (
+            <span className="text-2xs text-subtle">无测试点</span>
+          ) : (
+            <>
+              <span className="block text-2xs text-subtle">{problem.attempts > 0 ? '最佳' : '满分'}</span>
+              <span className="tabular block text-xs font-medium text-muted">
+                {problem.attempts > 0 ? `${problem.bestScore}/${problem.score}` : problem.score}
+              </span>
+            </>
+          )}
         </span>
       </Card>
     </Link>

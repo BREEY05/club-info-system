@@ -202,10 +202,10 @@ export default function FreeTimePage() {
                         <div className="text-sm font-medium text-ink">
                           {WEEKDAY_LABELS[candidate.weekday]} · {candidate.label}
                         </div>
-                        <div className="text-2xs text-subtle">
+                        <div className="tabular text-2xs text-subtle">
                           {candidate.startTime ? `${candidate.startTime}–${candidate.endTime ?? ''}` : '未设时间'}
                           {' · '}
-                          全员 {candidate.total} 人有空
+                          {candidate.total} 人全空
                         </div>
                       </div>
                       <Button size="sm" variant="soft" iconLeft={<CalendarPlus className="h-3.5 w-3.5" aria-hidden />} onClick={() => scheduleFor(candidate)}>
@@ -231,24 +231,39 @@ export default function FreeTimePage() {
                 <span className="text-sm font-medium text-ink">部分人有空</span>
                 <Badge tone="amber">前 {partial.length} 个</Badge>
               </div>
-              <div className="flex flex-col gap-1.5">
+              <Card className="divide-y divide-line">
+                <div className="grid grid-cols-[188px_64px_1fr_auto] items-center gap-3 px-3 py-1.5 text-2xs text-subtle">
+                  <span>时段</span>
+                  <span className="pr-1 text-right">空闲</span>
+                  <span>有课的人</span>
+                  <span className="w-[52px]" />
+                </div>
                 {partial.map((candidate) => (
-                  <Card key={candidate.weekday + '-' + candidate.slotId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                  <div
+                    key={candidate.weekday + '-' + candidate.slotId}
+                    className="grid grid-cols-[188px_64px_1fr_auto] items-center gap-3 px-3 py-2"
+                  >
                     <div className="min-w-0">
-                      <div className="text-xs font-medium text-ink">
+                      <div className="truncate text-xs font-medium text-ink">
                         {WEEKDAY_LABELS[candidate.weekday]} · {candidate.label}
-                        <span className="ml-2 text-2xs font-normal text-muted">
-                          {candidate.freeCount}/{candidate.total} 人有空
-                        </span>
                       </div>
-                      <div className="truncate text-2xs text-subtle">有课：{candidate.busyNames.join('、')}</div>
+                      <div className="tabular text-2xs text-subtle">
+                        {candidate.startTime ? `${candidate.startTime}–${candidate.endTime ?? ''}` : '未设时间'}
+                      </div>
+                    </div>
+                    <div className="tabular pr-1 text-right text-xs">
+                      <span className="font-medium text-ink">{candidate.freeCount}</span>
+                      <span className="text-subtle">/{candidate.total}</span>
+                    </div>
+                    <div className="truncate text-2xs text-muted" title={candidate.busyNames.join('、')}>
+                      {candidate.busyNames.join('、')}
                     </div>
                     <Button size="sm" variant="ghost" onClick={() => scheduleFor(candidate)}>
-                      仍然排
+                      排活动
                     </Button>
-                  </Card>
+                  </div>
                 ))}
-              </div>
+              </Card>
             </div>
           ) : null}
         </div>

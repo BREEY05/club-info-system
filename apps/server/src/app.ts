@@ -3,7 +3,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { AppError } from './lib/errors.ts';
-import { getDb } from './db/index.ts';
+import { defaultDatabasePath, getDb } from './db/index.ts';
 import { semesterRoutes } from './routes/semester.ts';
 import { templateRoutes } from './routes/templates.ts';
 import { slotRoutes } from './routes/slots.ts';
@@ -18,7 +18,7 @@ import { orgRoutes } from './routes/org.ts';
 import { judgeRoutes } from './routes/judge.ts';
 import { activityRoutes } from './routes/activities.ts';
 
-export const APP_VERSION = process.env.APP_VERSION ?? '1.2.0';
+export const APP_VERSION = process.env.APP_VERSION ?? '1.2.1';
 
 export interface BuildAppOptions {
   logger?: boolean | { level: string };
@@ -138,6 +138,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           version: APP_VERSION,
           db: 'sqlite',
           timezone: process.env.TZ ?? 'Asia/Shanghai',
+          dataPath: process.env.DATABASE_PATH ?? defaultDatabasePath(),
         },
       }));
       await api.register(orgRoutes, { prefix: '/org' });

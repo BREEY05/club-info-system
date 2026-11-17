@@ -38,7 +38,7 @@ export default function SettingsPage() {
             <h1 className="text-base font-semibold tracking-tight text-ink">设置</h1>
             {overview ? <span className="text-2xs text-subtle">{overview.semester.name} · {overview.semester.totalWeeks} 周</span> : null}
           </div>
-          <p className="mt-0.5 text-xs text-muted">配置学期周历、时间段、数据备份恢复，并查看本机运行信息。</p>
+          <p className="mt-0.5 text-xs text-muted">配置学期周历、导入导出与备份恢复，并查看数据存放在哪。</p>
         </div>
         <Button
           variant="secondary"

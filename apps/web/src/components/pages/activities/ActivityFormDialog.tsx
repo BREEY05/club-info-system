@@ -8,7 +8,7 @@ import type { ActivityInput } from '../../../api/activities';
 
 export const ACTIVITY_KINDS: { value: ActivityKind; label: string }[] = [
   { value: 'meeting', label: '例会' },
-  { value: 'training', label: '培训/训练' },
+  { value: 'training', label: '训练' },
   { value: 'event', label: '活动' },
   { value: 'other', label: '其他' },
 ];

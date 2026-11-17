@@ -1,10 +1,10 @@
 import { WEEKDAY_LABELS, type Weekday } from '@cims/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, CalendarClock, CalendarDays, CircleCheck, Code2, Sparkles, UserPlus, Users } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { judgeApi } from '../api/judge';
-import { fetchMemberStats, fetchOverview, statsKeys } from '../api/stats';
+import { fetchMemberStats, fetchOverview, fetchSlotStats, statsKeys } from '../api/stats';
 import { PageHeader } from '../components/layout/PageHeader';
 import { statusLabel } from '../components/pages/activities/ActivityFormDialog';
 import { Badge } from '../components/ui/Badge';
@@ -14,6 +14,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { useActivities } from '../hooks/useActivities';
 import { useClub } from '../hooks/useClub';
 import { cn } from '../lib/cn';
+import { heatTierOf } from '../lib/colors';
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -210,6 +211,37 @@ export default function DashboardPage() {
               </ul>
             )}
           </Card>
+
+          <Card className="flex flex-col">
+            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+              <div className="text-sm font-medium text-ink">最近提交</div>
+              <Link to="/practice/history" className="text-2xs text-brand hover:underline">
+                全部 →
+              </Link>
+            </div>
+            {submissions.length === 0 ? (
+              <div className="flex items-center gap-2 px-4 py-6 text-xs text-muted">
+                还没刷过题
+                <Link to="/practice" className="inline-flex items-center gap-0.5 text-brand hover:underline">
+                  去题库 <ArrowRight className="h-3 w-3" aria-hidden />
+                </Link>
+              </div>
+            ) : (
+              <div className="flex flex-col divide-y divide-line">
+                {submissions.map((submission) => (
+                  <div key={submission.id} className="flex items-center justify-between gap-2 px-4 py-2 text-xs">
+                    <div className="min-w-0">
+                      <div className="truncate text-ink">{submission.problemTitle}</div>
+                      <div className="text-2xs text-subtle">{submission.language}</div>
+                    </div>
+                    <Badge tone={submission.verdict === 'AC' ? 'mint' : submission.verdict ? 'danger' : 'neutral'}>
+                      {submission.verdict ?? submission.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -248,36 +280,8 @@ export default function DashboardPage() {
             )}
           </Card>
 
-          <Card className="flex flex-col">
-            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-              <div className="text-sm font-medium text-ink">最近提交</div>
-              <Link to="/practice/history" className="text-2xs text-brand hover:underline">
-                全部 →
-              </Link>
-            </div>
-            {submissions.length === 0 ? (
-              <div className="flex items-center gap-2 px-4 py-6 text-xs text-muted">
-                还没刷过题
-                <Link to="/practice" className="inline-flex items-center gap-0.5 text-brand hover:underline">
-                  去题库 <ArrowRight className="h-3 w-3" aria-hidden />
-                </Link>
-              </div>
-            ) : (
-              <div className="flex flex-col divide-y divide-line">
-                {submissions.map((submission) => (
-                  <div key={submission.id} className="flex items-center justify-between gap-2 px-4 py-2 text-xs">
-                    <div className="min-w-0">
-                      <div className="truncate text-ink">{submission.problemTitle}</div>
-                      <div className="text-2xs text-subtle">{submission.language}</div>
-                    </div>
-                    <Badge tone={submission.verdict === 'AC' ? 'mint' : submission.verdict ? 'danger' : 'neutral'}>
-                      {submission.verdict ?? submission.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+          <WeekGlance />
+
         </div>
       </div>
     </div>
@@ -313,5 +317,68 @@ function Stat({
         <div className="mt-2 text-xl font-semibold tracking-tight text-ink">{value}</div>
       </Card>
     </Link>
+  );
+}
+
+/** 本周速览：一张小热力图，颜色越深人越齐 */
+function WeekGlance() {
+  const query = useQuery({ queryKey: statsKeys.slots(), queryFn: () => fetchSlotStats(), staleTime: 30_000 });
+  const slots = query.data ?? [];
+
+  const rows = new Map<number, { label: string; time: string; cells: Map<number, { busy: number; free: number }> }>();
+  for (const item of slots) {
+    const row = rows.get(item.slotId) ?? {
+      label: item.label,
+      time: item.startTime ? `${item.startTime}–${item.endTime ?? ''}` : `${item.dayPart === 'morning' ? '上午' : item.dayPart === 'afternoon' ? '下午' : '晚上'}`,
+      cells: new Map<number, { busy: number; free: number }>(),
+    };
+    row.cells.set(item.weekday, { busy: item.busy, free: item.free });
+    rows.set(item.slotId, row);
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium text-ink">本周空闲速览</div>
+        <Link to="/timetable" className="text-2xs text-brand hover:underline">
+          看课表 →
+        </Link>
+      </div>
+      {rows.size === 0 ? (
+        <p className="mt-3 text-2xs text-muted">还没有时间段，先去「时间段」定义。</p>
+      ) : (
+        <>
+          <div className="mt-3 grid grid-cols-[62px_repeat(7,1fr)] gap-1">
+            <span />
+            {[1, 2, 3, 4, 5, 6, 7].map((weekday) => (
+              <span key={weekday} className="text-center text-2xs text-subtle">
+                {WEEKDAY_LABELS[weekday as Weekday].replace('周', '')}
+              </span>
+            ))}
+            {Array.from(rows.entries()).map(([slotId, row]) => (
+              <Fragment key={slotId}>
+                <span className="truncate text-2xs text-muted" title={`${row.label} ${row.time}`}>
+                  {row.label}
+                </span>
+                {[1, 2, 3, 4, 5, 6, 7].map((weekday) => {
+                  const cell = row.cells.get(weekday);
+                  const total = cell ? cell.busy + cell.free : 0;
+                  const tier = heatTierOf(cell?.free ?? 0, total);
+                  return (
+                    <span
+                      key={weekday}
+                      title={total === 0 ? '无数据' : `${WEEKDAY_LABELS[weekday as Weekday]} ${row.label} · 空闲 ${cell?.free ?? 0}/${total}`}
+                      className="h-4 rounded-[3px]"
+                      style={{ backgroundColor: total === 0 ? '#F3F4F6' : tier.background }}
+                    />
+                  );
+                })}
+              </Fragment>
+            ))}
+          </div>
+          <p className="mt-2 text-2xs text-subtle">颜色越深，这段人越齐；空白代表还没录课表。</p>
+        </>
+      )}
+    </Card>
   );
 }
